@@ -1,5 +1,5 @@
 import './App.css';
-import React, { useState, useEffect, ReactElement } from 'react';
+import React, { useState, useEffect, ReactElement, useRef } from 'react';
 import motokoLogo from './assets/motoko_moving.png';
 import motokoShadowLogo from './assets/motoko_shadow.png';
 import reactLogo from './assets/bob.png';
@@ -8,6 +8,9 @@ import viteLogo from './assets/corn.png';
 import { Principal } from '@dfinity/principal';
 // import {Agent, Actor, HttpAgent} from '@dfinity/agent';
 import ic from 'ic0';
+
+import { AuthClient } from '@dfinity/auth-client';
+import { HttpAgent, Actor, AnonymousIdentity } from '@dfinity/agent';
 
 import { idlFactory as icpFactory } from './declarations/nns-ledger';
 import { _SERVICE as bobService } from './declarations/nns-ledger/index.d';
@@ -56,11 +59,106 @@ function App() {
   const [totalBobHeld, setTotalBobHeld] = useState<string>('');
   const [totalReBobMinted, setTotalReBobMinted] = useState<string>('');
 
+  const actorRef = useRef(null);
+  const authClientRef = useRef<AuthClient | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loggedInPrincipal, setLoggedInPrincipal] = useState('');
+
   const bobFee: bigint = 1_000_000n;
   const reBobFee: bigint = 10_000n;
 
   const checkLoggedIn = async () => {
     await setIsConnected(!!(await window.ic.plug.isConnected()));
+  };
+
+  const login = async (): Promise<void> => {
+    // Create AuthClient instance
+    authClientRef.current = await AuthClient.create();
+
+    // Check if authClientRef was set correctly
+    if (!authClientRef.current) {
+      console.error('AuthClient could not be created.');
+      return;
+    }
+
+    // Use the non-null assertion to ensure TypeScript knows it isn't null
+    return new Promise((resolve, reject) => {
+      authClientRef.current!.login({
+        identityProvider:
+          //'http://localhost:4943/?canisterId=bw4dl-smaaa-aaaaa-qaacq-cai', //'https://identity.ic0.app/#authorize',
+          'http://bw4dl-smaaa-aaaaa-qaacq-cai.localhost:4943',
+        //http://r7inp-6aaaa-aaaaa-aaabq-cai.127.0.0.1:4943?#authorize
+        onSuccess: () => {
+          setIsAuthenticated(true); // Set authentication state to true
+          resolve(); // Resolve the promise on success
+        },
+        onError: (error) => {
+          console.error('Login failed:', error);
+          reject(error); // Reject the promise on error
+        },
+      });
+    });
+  };
+
+  const logout = async () => {
+    // if (!isAuthenticated) {
+    //   console.log("not logged in");
+    // }
+    if (authClientRef.current) {
+      await authClientRef.current.logout();
+      setIsAuthenticated(false);
+      //console.log("logged out");
+      setLoggedInPrincipal('');
+    }
+  };
+
+  const createAgent = async () => {
+    if (!authClientRef.current) {
+      console.log('authClientRef was null in createAgent()');
+      return;
+    }
+    const identity = authClientRef.current.getIdentity();
+
+    const agent = await new HttpAgent({ identity });
+
+    actorRef.current = Actor.createActor(reBobFactory, {
+      agent,
+      canisterId: reBobCanisterID,
+    });
+
+    //console.log("actor created");
+  };
+
+  const setupInternetIdentity = async () => {
+    await login();
+
+    await createAgent();
+
+    if (!actorRef.current) {
+      console.log("couldn't setup the internet identity actor!");
+      return;
+    }
+
+    if (!authClientRef.current) {
+      console.log(
+        "couldn't setup the authClientRef during internet identity setup"
+      );
+      return;
+    }
+
+    //console.log("attempting to print principal");
+    //const principal = await actorRef.current.whoami();
+    // setLoggedInPrincipal(principal.toString());
+    const identity = authClientRef.current.getIdentity();
+
+    console.log(identity.getPrincipal().toString());
+    setLoggedInPrincipal(identity.getPrincipal().toString());
+
+    //console.log(principal.toString());
+  };
+
+  const handleInternetIdentityLogin = () => {
+    setupInternetIdentity();
   };
 
   const fetchTotalTokens = async () => {
@@ -360,11 +458,22 @@ function App() {
       </div>
 
       {!isConnected ? (
-        <div className="card">
-          <button onClick={handleLogin} disabled={loading}>
-            Login with Plug
-          </button>
-        </div>
+        <>
+          <div className="card">
+            <button onClick={handleLogin} disabled={loading}>
+              Login with Plug
+            </button>
+          </div>
+          <div>
+            <button
+              onClick={() => {
+                handleInternetIdentityLogin();
+              }}
+            >
+              Login with II
+            </button>
+          </div>
+        </>
       ) : (
         <>
           <p>

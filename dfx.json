@@ -7,10 +7,10 @@
         "node_compatibility": true
       }
     },
-    "fakebob" : {
-      "type" : "motoko",
+    "fakebob": {
+      "type": "motoko",
       "main": "backend/FakeBob.mo",
-      "declarations":{
+      "declarations": {
         "node_compatibility": true
       }
     },
@@ -18,6 +18,18 @@
       "dependencies": ["backend"],
       "type": "assets",
       "source": ["dist/"]
+    },
+    "internet_identity": {
+      "type": "custom",
+      "candid": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity.did",
+      "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz",
+      "shrink": false,
+      "remote": {
+        "candid": "internet_identity.did",
+        "id": {
+          "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+        }
+      }
     }
   },
   "defaults": {
