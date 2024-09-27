@@ -24,6 +24,7 @@ import ShowTransactionStatus from './components/ShowTransactionStatus';
 import BobWithdrawField from './components/BobWithdrawField';
 
 import bigintToFloatString from './bigIntToFloatString';
+import PlugLoginHandler from './components/PlugLoginHandler';
 
 const bobCanisterID =
   window.location.href.includes('localhost') ||
@@ -37,7 +38,6 @@ const reBobCanisterID =
     : 'qvwlv-uyaaa-aaaas-aidpq-cai';
 
 function App() {
-  const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(false);
   // const [icpBalance, setIcpBalance] = useState<bigint>(0n);
   const [bobLedgerBalance, setBobLedgerBalance] = useState<bigint>(0n);
@@ -49,27 +49,23 @@ function App() {
   const [share, setShare] = useState<bigint>(0n);
   const [stats, setStats] = useState<Stats | null>(null);
 
+  const [plugIsConnected, setPlugIsConnected] = useState<boolean>(false);
+
   const [reBobActor, setreBobActor] = useState<reBobService | null>(null);
-  const [reBobActorTemp, setreBobActorTemp] = useState<reBobService | null>(
-    null
-  );
+  // const [reBobActorTemp, setreBobActorTemp] = useState<reBobService | null>(
+  //   null
+  // );
   const [bobLedgerActor, setBobLedgerActor] = useState<bobService | null>(null);
-  const [yourPrincipal, setYourPrincipal] = useState<string>('null');
 
   const [totalBobHeld, setTotalBobHeld] = useState<string>('');
   const [totalReBobMinted, setTotalReBobMinted] = useState<string>('');
 
-  const actorRef = useRef(null);
   const authClientRef = useRef<AuthClient | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loggedInPrincipal, setLoggedInPrincipal] = useState('');
 
   const bobFee: bigint = 1_000_000n;
   const reBobFee: bigint = 10_000n;
-
-  const checkLoggedIn = async () => {
-    await setIsConnected(!!(await window.ic.plug.isConnected()));
-  };
 
   const login = async (): Promise<void> => {
     // Create AuthClient instance
@@ -112,6 +108,8 @@ function App() {
     }
   };
 
+  const [myAgent, setMyAgent] = useState<reBobService | null>(null);
+
   const createAgent = async () => {
     if (!authClientRef.current) {
       console.log('authClientRef was null in createAgent()');
@@ -119,29 +117,40 @@ function App() {
     }
     const identity = authClientRef.current.getIdentity();
 
-    const agent = await new HttpAgent({ identity });
-
-    actorRef.current = Actor.createActor(reBobFactory, {
-      agent,
-      canisterId: reBobCanisterID,
+    const agent = new HttpAgent({
+      host:
+        window.location.href.includes('localhost') ||
+        window.location.href.includes('127.0.0.1')
+          ? 'http://localhost:4943'
+          : 'https://ic0.app/',
+      identity: identity,
     });
 
-    //console.log("actor created");
+    if (
+      window.location.href.includes('localhost') ||
+      window.location.href.includes('127.0.0.1')
+    ) {
+      agent.fetchRootKey();
+    }
+
+    setMyAgent(
+      await Actor.createActor(reBobFactory, {
+        agent,
+        canisterId: reBobCanisterID,
+      })
+    );
   };
 
   const setupInternetIdentity = async () => {
     await login();
 
     await createAgent();
+  };
 
-    if (!actorRef.current) {
-      console.log("couldn't setup the internet identity actor!");
-      return;
-    }
-
-    if (!authClientRef.current) {
+  useEffect(() => {
+    if (!myAgent || !authClientRef.current) {
       console.log(
-        "couldn't setup the authClientRef during internet identity setup"
+        "couldn't setup the internet identity agent and/or the authClientRef!"
       );
       return;
     }
@@ -153,8 +162,25 @@ function App() {
 
     console.log(identity.getPrincipal().toString());
     setLoggedInPrincipal(identity.getPrincipal().toString());
-
     //console.log(principal.toString());
+  }, [myAgent, authClientRef.current]);
+
+  const asyncFunction = async () => {
+    if (!myAgent) return;
+
+    //const response = await myAgent.icrc1_metadata();
+
+    console.log(myAgent);
+    console.log(loggedInPrincipal);
+    const response = await myAgent.icrc1_metadata();
+    //const response1 = await actorRef.current.icrc1_metadata();
+
+    console.log(response);
+    //console.log(response1);
+  };
+
+  const handleButtonClickTest = () => {
+    asyncFunction();
   };
 
   const handleInternetIdentityLogin = () => {
@@ -185,7 +211,7 @@ function App() {
     setLoading(false);
     if (bobLedgerActor && reBobActor) {
       fetchBalances();
-      fetchStats();
+      //fetchStats();
     } else {
       console.error('Actors were not loaded when trying to cleanup!');
     }
@@ -194,7 +220,7 @@ function App() {
   useEffect(() => {
     console.log('Component mounted, waiting for user to log in...');
     fetchTotalTokens();
-    checkLoggedIn();
+    // checkLoggedIn();
 
     //setUpActors(); // can't use plug actors as anonymous?
     //console.log("first time", isConnected);
@@ -210,60 +236,22 @@ function App() {
     // Note: If `fetchBalances` depends on `icpActor` or `icdvActor`, you should ensure it's capable of handling null values or wait until these values are not null.
   }, [bobLedgerActor, reBobActor]);
 
-  useEffect(() => {
-    // This code runs after `icpActor` and `icdvActor` have been updated.
-    //console.log("actors updated", icpActor, bobActor, bobLedgerActor, reBobActor);
+  // useEffect(() => {
+  //   // This code runs after `icpActor` and `icdvActor` have been updated.
+  //   //console.log("actors updated", icpActor, bobActor, bobLedgerActor, reBobActor);
 
-    fetchStats();
-    //fetchMinters();
-    // Note: If `fetchBalances` depends on `icpActor` or `icdvActor`, you should ensure it's capable of handling null values or wait until these values are not null.
-  }, [reBobActorTemp]);
+  //   fetchStats();
+  //   //fetchMinters();
+  //   // Note: If `fetchBalances` depends on `icpActor` or `icdvActor`, you should ensure it's capable of handling null values or wait until these values are not null.
+  // }, [reBobActorTemp]);
 
-  useEffect(() => {
-    // This code runs after `icpActor` and `icdvActor` have been updated.
-    if (isConnected) {
-      fetchPrincipal();
-      // Ensure fetchBalances is defined and correctly handles asynchronous operations
-      setUpActors();
-    }
-
-    console.log('isConnected', isConnected);
-
-    // Note: If `fetchBalances` depends on `icpActor` or `icdvActor`, you should ensure it's capable of handling null values or wait until these values are not null.
-  }, [isConnected]);
-
-  const fetchPrincipal = async () => {
-    if (!(await window.ic.plug.agent)) return;
-    setYourPrincipal((await window.ic.plug.agent.getPrincipal()).toString());
-  };
-
-  const fetchStats = async () => {
-    if (reBobActorTemp != null) {
-      const stats = await reBobActorTemp.stats();
-      console.log({ stats });
-      await setStats(stats);
-    }
-  };
-
-  const setUpActors = async () => {
-    console.log('Setting up actors...', bobCanisterID, reBobCanisterID);
-
-    const getreBobActor = await window.ic.plug.createActor({
-      canisterId: reBobCanisterID,
-      interfaceFactory: reBobFactory,
-    });
-
-    await setreBobActor(getreBobActor);
-
-    await setBobLedgerActor(
-      await window.ic.plug.createActor({
-        canisterId: bobCanisterID,
-        interfaceFactory: icpFactory,
-      })
-    );
-
-    console.log('actors', bobLedgerActor);
-  };
+  // const fetchStats = async () => {
+  //   if (reBobActorTemp != null) {
+  //     const stats = await reBobActorTemp.stats();
+  //     console.log({ stats });
+  //     await setStats(stats);
+  //   }
+  // };
 
   const getBobLedgerBalance = async () => {
     if (bobLedgerActor === null) return;
@@ -333,7 +321,7 @@ function App() {
 
     fetchTotalTokens();
 
-    if (!isConnected) return;
+    //if (!isConnected) return;
 
     console.log('Fetching balances...', bobLedgerActor, reBobActor);
     if (bobLedgerActor === null || reBobActor === null) return;
@@ -343,67 +331,6 @@ function App() {
     getReBobLedgerBalance();
     getBobLedgerAllowance();
     getReBobLedgerAllowance();
-  };
-
-  const handleLogout = async () => {
-    setLoading(true);
-
-    if (isConnected) {
-      try {
-        await window.ic.plug.disconnect();
-        setIsConnected(false);
-      } catch (error) {
-        console.error('Logout failed:', error);
-      }
-    }
-    setLoading(false);
-  };
-
-  const handleLogin = async () => {
-    handleLogout();
-    setLoading(true);
-    try {
-      const connected = await window.ic.plug.isConnected();
-      if (!connected) {
-        const pubkey = await window.ic.plug.requestConnect({
-          // whitelist, host, and onConnectionUpdate need to be defined or imported appropriately
-          whitelist: [bobCanisterID, reBobCanisterID],
-          host:
-            window.location.href.includes('localhost') ||
-            window.location.href.includes('127.0.0.1')
-              ? 'http://127.0.0.1:4943'
-              : 'https://ic0.app',
-          onConnectionUpdate: async () => {
-            console.log(
-              'Connection updated',
-              await window.ic.plug.isConnected()
-            );
-            await setIsConnected(!!(await window.ic.plug.isConnected()));
-          },
-        });
-        if (
-          window.location.href.includes('localhost') ||
-          window.location.href.includes('127.0.0.1')
-        ) {
-          await window.ic.plug.sessionManager.sessionData.agent.agent.fetchRootKey();
-        }
-        console.log('Connected with pubkey:', pubkey);
-        await setIsConnected(true);
-      } else {
-        if (
-          window.location.href.includes('localhost') ||
-          window.location.href.includes('127.0.0.1')
-        ) {
-          await window.ic.plug.sessionManager.sessionData.agent.agent.fetchRootKey();
-        }
-        setIsConnected(true);
-      }
-    } catch (error) {
-      console.error('Login failed:', error);
-      setIsConnected(false);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleFailedWithdraw = async () => {
@@ -457,13 +384,19 @@ function App() {
         </h3>
       </div>
 
-      {!isConnected ? (
+      <PlugLoginHandler
+        bobCanisterID={bobCanisterID}
+        setBobLedgerActor={setBobLedgerActor}
+        reBobCanisterID={reBobCanisterID}
+        setreBobActor={setreBobActor}
+        loading={loading}
+        setLoading={setLoading}
+        plugIsConnected={plugIsConnected}
+        setPlugIsConnected={setPlugIsConnected}
+      />
+
+      {!plugIsConnected || false ? (
         <>
-          <div className="card">
-            <button onClick={handleLogin} disabled={loading}>
-              Login with Plug
-            </button>
-          </div>
           <div>
             <button
               onClick={() => {
@@ -472,19 +405,17 @@ function App() {
             >
               Login with II
             </button>
+            <button
+              onClick={() => {
+                handleButtonClickTest();
+              }}
+            >
+              test II logged in
+            </button>
           </div>
         </>
       ) : (
         <>
-          <p>
-            Your principal is
-            <br />
-            {yourPrincipal}
-          </p>
-          <button onClick={handleLogout} disabled={loading}>
-            Logout
-          </button>
-
           <div
             style={{
               marginTop: '16px',
@@ -510,7 +441,7 @@ function App() {
                 setLoading={setLoading}
                 bobLedgerBalance={bobLedgerBalance}
                 bobFee={bobFee}
-                isConnected={isConnected}
+                isConnected={plugIsConnected}
                 reBobCanisterID={reBobCanisterID}
                 bobLedgerActor={bobLedgerActor}
                 cleanUp={cleanUp}
@@ -538,7 +469,7 @@ function App() {
                 reBobLedgerBalance={reBobLedgerBalance}
                 reBobFee={reBobFee}
                 bobFee={bobFee}
-                isConnected={isConnected}
+                isConnected={plugIsConnected}
                 reBobActor={reBobActor}
                 reBobCanisterID={reBobCanisterID}
                 cleanUp={cleanUp}

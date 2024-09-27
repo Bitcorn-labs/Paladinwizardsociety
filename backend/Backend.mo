@@ -37,8 +37,8 @@ shared ({ caller = _owner }) actor class Token(
   let Map = ICRC1.Map;
 
   let ICPLedger : ICPTypes.Service = actor ("ryjl3-tyaaa-aaaaa-aaaba-cai");
-  //let BOBLedger : ICPTypes.Service = actor ("7pail-xaaaa-aaaas-aabmq-cai");
-  let BOBLedger : ICPTypes.Service = actor ("bd3sg-teaaa-aaaaa-qaaba-cai"); // Use 7pail-xaaaa-aaaas-aabmq-cai for ic0
+  let BOBLedger : ICPTypes.Service = actor ("7pail-xaaaa-aaaas-aabmq-cai");
+  // let BOBLedger : ICPTypes.Service = actor ("bd3sg-teaaa-aaaaa-qaaba-cai"); // Use 7pail-xaaaa-aaaas-aabmq-cai for ic0
 
   type Account = ICRC1.Account;
 
