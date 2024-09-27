@@ -216,10 +216,10 @@ function App() {
   const handleFailedWithdraw = async () => {
     setLoading(true);
 
-    //bobWithdraw(reBobLedgerAllowance);
-
+    //bobWithdraw(reBobLedgerAllowance); // 
     setLoading(false);
   };
+
 
   const handleFailedMint = async () => {
     setLoading(true);
@@ -263,6 +263,7 @@ function App() {
           )}{' '}
         </h3>
       </div>
+
       <PlugLoginHandler
         bobCanisterID={bobCanisterID}
         setBobLedgerActor={setBobLedgerActor}
@@ -330,7 +331,6 @@ function App() {
                 reBobActor={reBobActor}
                 minimumTransactionAmount={3000000n}
               />
-
               <p></p>
             </div>
             <div
