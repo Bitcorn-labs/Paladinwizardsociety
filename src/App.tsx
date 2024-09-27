@@ -1,5 +1,5 @@
 import './App.css';
-import React, { useState, useEffect, ReactElement } from 'react';
+import React, { useState, useEffect, ReactElement, useRef } from 'react';
 import motokoLogo from './assets/motoko_moving.png';
 import motokoShadowLogo from './assets/motoko_shadow.png';
 import reactLogo from './assets/bob.png';
@@ -8,6 +8,9 @@ import viteLogo from './assets/corn.png';
 import { Principal } from '@dfinity/principal';
 // import {Agent, Actor, HttpAgent} from '@dfinity/agent';
 import ic from 'ic0';
+
+import { AuthClient } from '@dfinity/auth-client';
+import { HttpAgent, Actor, AnonymousIdentity } from '@dfinity/agent';
 
 import { idlFactory as icpFactory } from './declarations/nns-ledger';
 import { _SERVICE as bobService } from './declarations/nns-ledger/index.d';
@@ -21,6 +24,8 @@ import ShowTransactionStatus from './components/ShowTransactionStatus';
 import BobWithdrawField from './components/BobWithdrawField';
 
 import bigintToFloatString from './bigIntToFloatString';
+import PlugLoginHandler from './components/PlugLoginHandler';
+import InternetIdentityLoginHandler from './components/InternetIdentityLoginHandler';
 
 const bobCanisterID =
   window.location.href.includes('localhost') ||
@@ -34,7 +39,6 @@ const reBobCanisterID =
     : 'qvwlv-uyaaa-aaaas-aidpq-cai';
 
 function App() {
-  const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(false);
   // const [icpBalance, setIcpBalance] = useState<bigint>(0n);
   const [bobLedgerBalance, setBobLedgerBalance] = useState<bigint>(0n);
@@ -46,22 +50,22 @@ function App() {
   const [share, setShare] = useState<bigint>(0n);
   const [stats, setStats] = useState<Stats | null>(null);
 
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [connectionType, setConnectionType] = useState<string>('');
+
   const [reBobActor, setreBobActor] = useState<reBobService | null>(null);
-  const [reBobActorTemp, setreBobActorTemp] = useState<reBobService | null>(
-    null
-  );
+  // const [reBobActorTemp, setreBobActorTemp] = useState<reBobService | null>(
+  //   null
+  // );
   const [bobLedgerActor, setBobLedgerActor] = useState<bobService | null>(null);
-  const [yourPrincipal, setYourPrincipal] = useState<string>('null');
 
   const [totalBobHeld, setTotalBobHeld] = useState<string>('');
   const [totalReBobMinted, setTotalReBobMinted] = useState<string>('');
 
+  const [loggedInPrincipal, setLoggedInPrincipal] = useState('');
+
   const bobFee: bigint = 1_000_000n;
   const reBobFee: bigint = 10_000n;
-
-  const checkLoggedIn = async () => {
-    await setIsConnected(!!(await window.ic.plug.isConnected()));
-  };
 
   const fetchTotalTokens = async () => {
     // const totalBobHeldResponse = await bobLedgerActor.icrc1_balance_of({
@@ -87,7 +91,7 @@ function App() {
     setLoading(false);
     if (bobLedgerActor && reBobActor) {
       fetchBalances();
-      fetchStats();
+      //fetchStats();
     } else {
       console.error('Actors were not loaded when trying to cleanup!');
     }
@@ -96,7 +100,7 @@ function App() {
   useEffect(() => {
     console.log('Component mounted, waiting for user to log in...');
     fetchTotalTokens();
-    checkLoggedIn();
+    // checkLoggedIn();
 
     //setUpActors(); // can't use plug actors as anonymous?
     //console.log("first time", isConnected);
@@ -112,66 +116,28 @@ function App() {
     // Note: If `fetchBalances` depends on `icpActor` or `icdvActor`, you should ensure it's capable of handling null values or wait until these values are not null.
   }, [bobLedgerActor, reBobActor]);
 
-  useEffect(() => {
-    // This code runs after `icpActor` and `icdvActor` have been updated.
-    //console.log("actors updated", icpActor, bobActor, bobLedgerActor, reBobActor);
+  // useEffect(() => {
+  //   // This code runs after `icpActor` and `icdvActor` have been updated.
+  //   //console.log("actors updated", icpActor, bobActor, bobLedgerActor, reBobActor);
 
-    fetchStats();
-    //fetchMinters();
-    // Note: If `fetchBalances` depends on `icpActor` or `icdvActor`, you should ensure it's capable of handling null values or wait until these values are not null.
-  }, [reBobActorTemp]);
+  //   fetchStats();
+  //   //fetchMinters();
+  //   // Note: If `fetchBalances` depends on `icpActor` or `icdvActor`, you should ensure it's capable of handling null values or wait until these values are not null.
+  // }, [reBobActorTemp]);
 
-  useEffect(() => {
-    // This code runs after `icpActor` and `icdvActor` have been updated.
-    if (isConnected) {
-      fetchPrincipal();
-      // Ensure fetchBalances is defined and correctly handles asynchronous operations
-      setUpActors();
-    }
-
-    console.log('isConnected', isConnected);
-
-    // Note: If `fetchBalances` depends on `icpActor` or `icdvActor`, you should ensure it's capable of handling null values or wait until these values are not null.
-  }, [isConnected]);
-
-  const fetchPrincipal = async () => {
-    if (!(await window.ic.plug.agent)) return;
-    setYourPrincipal((await window.ic.plug.agent.getPrincipal()).toString());
-  };
-
-  const fetchStats = async () => {
-    if (reBobActorTemp != null) {
-      const stats = await reBobActorTemp.stats();
-      console.log({ stats });
-      await setStats(stats);
-    }
-  };
-
-  const setUpActors = async () => {
-    console.log('Setting up actors...', bobCanisterID, reBobCanisterID);
-
-    const getreBobActor = await window.ic.plug.createActor({
-      canisterId: reBobCanisterID,
-      interfaceFactory: reBobFactory,
-    });
-
-    await setreBobActor(getreBobActor);
-
-    await setBobLedgerActor(
-      await window.ic.plug.createActor({
-        canisterId: bobCanisterID,
-        interfaceFactory: icpFactory,
-      })
-    );
-
-    console.log('actors', bobLedgerActor);
-  };
+  // const fetchStats = async () => {
+  //   if (reBobActorTemp != null) {
+  //     const stats = await reBobActorTemp.stats();
+  //     console.log({ stats });
+  //     await setStats(stats);
+  //   }
+  // };
 
   const getBobLedgerBalance = async () => {
     if (bobLedgerActor === null) return;
 
     const bobLedgerBalanceResponse = await bobLedgerActor.icrc1_balance_of({
-      owner: await window.ic.plug.agent.getPrincipal(),
+      owner: Principal.fromText(loggedInPrincipal),
       subaccount: [],
     });
 
@@ -183,7 +149,7 @@ function App() {
   const getReBobLedgerBalance = async () => {
     if (reBobActor === null) return;
     const reBobLedgerBalanceResponse = await reBobActor.icrc1_balance_of({
-      owner: await window.ic.plug.agent.getPrincipal(),
+      owner: Principal.fromText(loggedInPrincipal),
       subaccount: [],
     });
 
@@ -196,7 +162,7 @@ function App() {
     if (bobLedgerActor === null) return;
     const bobLedgerAllowanceResponse = await bobLedgerActor.icrc2_allowance({
       account: {
-        owner: await window.ic.plug.agent.getPrincipal(),
+        owner: Principal.fromText(loggedInPrincipal),
         subaccount: [],
       },
       spender: { owner: Principal.fromText(reBobCanisterID), subaccount: [] },
@@ -214,7 +180,7 @@ function App() {
     if (reBobActor === null) return;
     const reBobLedgerAllowanceResponse = await reBobActor.icrc2_allowance({
       account: {
-        owner: await window.ic.plug.agent.getPrincipal(),
+        owner: Principal.fromText(loggedInPrincipal),
         subaccount: [],
       },
       spender: { owner: Principal.fromText(reBobCanisterID), subaccount: [] },
@@ -235,7 +201,7 @@ function App() {
 
     fetchTotalTokens();
 
-    if (!isConnected) return;
+    //if (!isConnected) return;
 
     console.log('Fetching balances...', bobLedgerActor, reBobActor);
     if (bobLedgerActor === null || reBobActor === null) return;
@@ -245,69 +211,6 @@ function App() {
     getReBobLedgerBalance();
     getBobLedgerAllowance();
     getReBobLedgerAllowance();
-  };
-
-  const handleLogout = async () => {
-    setLoading(true);
-
-    if (isConnected) {
-      try {
-        await window.ic.plug.disconnect();
-        setIsConnected(false);
-      } catch (error) {
-        console.error('Logout failed:', error);
-      }
-    }
-    setLoading(false);
-  };
-
-  const handleLogin = async () => {
-    handleLogout();
-    setLoading(true);
-    
-    try {
-      const connected = await window.ic.plug.isConnected();
-      if (!connected) {
-        const pubkey = await window.ic.plug.requestConnect({
-          // whitelist, host, and onConnectionUpdate need to be defined or imported appropriately
-          whitelist: [bobCanisterID, reBobCanisterID],
-          host:
-            window.location.href.includes('localhost') ||
-            window.location.href.includes('127.0.0.1')
-              ? 'http://127.0.0.1:4943'
-              : 'https://ic0.app',
-          onConnectionUpdate: async () => {
-            console.log(
-              'Connection updated',
-              await window.ic.plug.isConnected()
-            );
-            await setIsConnected(!!(await window.ic.plug.isConnected()));
-          },
-        });
-        if (
-          window.location.href.includes('localhost') ||
-          window.location.href.includes('127.0.0.1')
-        ) {
-          await window.ic.plug.sessionManager.sessionData.agent.agent.fetchRootKey();
-        }
-        console.log('Connected with pubkey:', pubkey);
-        await setIsConnected(true);
-
-      } else {
-        if (
-          window.location.href.includes('localhost') ||
-          window.location.href.includes('127.0.0.1')
-        ) {
-          await window.ic.plug.sessionManager.sessionData.agent.agent.fetchRootKey();
-        }
-        setIsConnected(true);
-      }
-    } catch (error) {
-      console.error('Login failed:', error);
-      setIsConnected(false);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleFailedWithdraw = async () => {
@@ -361,24 +264,41 @@ function App() {
         </h3>
       </div>
 
+      <PlugLoginHandler
+        bobCanisterID={bobCanisterID}
+        setBobLedgerActor={setBobLedgerActor}
+        reBobCanisterID={reBobCanisterID}
+        setreBobActor={setreBobActor}
+        loading={loading}
+        setLoading={setLoading}
+        isConnected={isConnected}
+        setIsConnected={setIsConnected}
+        connectionType={connectionType}
+        setConnectionType={setConnectionType}
+        setBobLedgerBalance={setBobLedgerBalance}
+        setreBobLedgerBalance={setreBobLedgerBalance}
+        loggedInPrincipal={loggedInPrincipal}
+        setLoggedInPrincipal={setLoggedInPrincipal}
+      />
 
-      {!isConnected ? (
-        <div className="card">
-          <button onClick={handleLogin} disabled={loading}>
-            Login with Plug
-          </button>
-        </div>
+      <InternetIdentityLoginHandler
+        bobCanisterID={bobCanisterID}
+        setBobLedgerActor={setBobLedgerActor}
+        reBobCanisterID={reBobCanisterID}
+        setreBobActor={setreBobActor}
+        loading={loading}
+        setLoading={setLoading}
+        isConnected={isConnected}
+        setIsConnected={setIsConnected}
+        connectionType={connectionType}
+        setConnectionType={setConnectionType}
+        loggedInPrincipal={loggedInPrincipal}
+        setLoggedInPrincipal={setLoggedInPrincipal}
+      />
+      {!isConnected || false ? (
+        <></>
       ) : (
         <>
-          <p>
-            Your principal is
-            <br />
-            {yourPrincipal}
-          </p>
-          <button onClick={handleLogout} disabled={loading}>
-            Logout
-          </button>
-
           <div
             style={{
               marginTop: '16px',
