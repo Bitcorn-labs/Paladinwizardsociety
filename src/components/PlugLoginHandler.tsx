@@ -6,13 +6,19 @@ import { _SERVICE as bobService } from '../declarations/nns-ledger/index.d';
 
 interface PlugLoginHandlerProps {
   bobCanisterID: string;
-  setBobLedgerActor: (value: bobService) => void;
+  setBobLedgerActor: (value: bobService | null) => void;
   reBobCanisterID: string;
-  setreBobActor: (value: reBobService) => void;
+  setreBobActor: (value: reBobService | null) => void;
   loading: boolean;
   setLoading: (value: boolean) => void;
-  plugIsConnected: boolean;
-  setPlugIsConnected: (value: boolean) => void;
+  isConnected: boolean;
+  setIsConnected: (value: boolean) => void;
+  connectionType: string;
+  setConnectionType: (value: string) => void;
+  setBobLedgerBalance: (value: bigint) => void;
+  setreBobLedgerBalance: (value: bigint) => void;
+  loggedInPrincipal: string;
+  setLoggedInPrincipal: (value: string) => void;
 }
 
 const PlugLoginHandler: React.FC<PlugLoginHandlerProps> = ({
@@ -22,32 +28,46 @@ const PlugLoginHandler: React.FC<PlugLoginHandlerProps> = ({
   setreBobActor,
   loading,
   setLoading,
-  plugIsConnected,
-  setPlugIsConnected,
+  isConnected,
+  setIsConnected,
+  connectionType,
+  setConnectionType,
+  setBobLedgerBalance,
+  setreBobLedgerBalance,
+  loggedInPrincipal,
+  setLoggedInPrincipal,
 }) => {
-  //const [isConnected, setIsConnected] = useState(false);
-  const [yourPrincipal, setYourPrincipal] = useState<string>('null');
+  const checkConnection = async () => {
+    const connection = !!(await window.ic.plug.isConnected());
 
-  const checkLoggedIn = async () => {
-    await setPlugIsConnected(!!(await window.ic.plug.isConnected()));
+    setIsConnected(connection);
+
+    if (connection) {
+      setConnectionType('plug');
+      return true;
+    } else {
+      setConnectionType('');
+      return false;
+    }
   };
 
   useEffect(() => {
     // This code runs after `icpActor` and `icdvActor` have been updated.
-    if (plugIsConnected) {
+    if (isConnected && connectionType === 'plug') {
       fetchPrincipal();
       // Ensure fetchBalances is defined and correctly handles asynchronous operations
       setUpActors();
+      console.log('isConnected', isConnected, connectionType);
     }
 
-    console.log('isConnected', plugIsConnected);
-
     // Note: If `fetchBalances` depends on `icpActor` or `icdvActor`, you should ensure it's capable of handling null values or wait until these values are not null.
-  }, [plugIsConnected]);
+  }, [isConnected]);
 
   const fetchPrincipal = async () => {
-    if (!(await window.ic.plug.agent)) return;
-    setYourPrincipal((await window.ic.plug.agent.getPrincipal()).toString());
+    if (!checkConnection) return;
+    setLoggedInPrincipal(
+      (await window.ic.plug.agent.getPrincipal()).toString()
+    );
   };
 
   const setUpActors = async () => {
@@ -58,9 +78,9 @@ const PlugLoginHandler: React.FC<PlugLoginHandlerProps> = ({
       interfaceFactory: reBobFactory,
     });
 
-    await setreBobActor(getreBobActor);
+    setreBobActor(getreBobActor);
 
-    await setBobLedgerActor(
+    setBobLedgerActor(
       await window.ic.plug.createActor({
         canisterId: bobCanisterID,
         interfaceFactory: icpFactory,
@@ -71,10 +91,15 @@ const PlugLoginHandler: React.FC<PlugLoginHandlerProps> = ({
   const handleLogout = async () => {
     setLoading(true);
 
-    if (plugIsConnected) {
+    if (isConnected && connectionType === 'plug') {
       try {
         await window.ic.plug.disconnect();
-        setPlugIsConnected(false);
+        setreBobActor(null);
+        setBobLedgerActor(null);
+        setIsConnected(false);
+        setConnectionType('');
+        setBobLedgerBalance(0n);
+        setreBobLedgerBalance(0n);
       } catch (error) {
         console.error('Logout failed:', error);
       }
@@ -86,7 +111,7 @@ const PlugLoginHandler: React.FC<PlugLoginHandlerProps> = ({
     handleLogout();
     setLoading(true);
     try {
-      const connected = await window.ic.plug.isConnected();
+      const connected = await checkConnection();
       if (!connected) {
         const pubkey = await window.ic.plug.requestConnect({
           // whitelist, host, and onConnectionUpdate need to be defined or imported appropriately
@@ -101,7 +126,7 @@ const PlugLoginHandler: React.FC<PlugLoginHandlerProps> = ({
               'Connection updated',
               await window.ic.plug.isConnected()
             );
-            await setPlugIsConnected(!!(await window.ic.plug.isConnected()));
+            checkConnection();
           },
         });
         if (
@@ -111,7 +136,8 @@ const PlugLoginHandler: React.FC<PlugLoginHandlerProps> = ({
           await window.ic.plug.sessionManager.sessionData.agent.agent.fetchRootKey();
         }
         console.log('Connected with pubkey:', pubkey);
-        await setPlugIsConnected(true);
+        await setIsConnected(true);
+        setConnectionType('plug');
       } else {
         if (
           window.location.href.includes('localhost') ||
@@ -119,39 +145,45 @@ const PlugLoginHandler: React.FC<PlugLoginHandlerProps> = ({
         ) {
           await window.ic.plug.sessionManager.sessionData.agent.agent.fetchRootKey();
         }
-        setPlugIsConnected(true);
+        setIsConnected(true);
+        setConnectionType('plug');
       }
     } catch (error) {
       console.error('Login failed:', error);
-      setPlugIsConnected(false);
+      setIsConnected(false);
+      setConnectionType('');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    checkLoggedIn();
+    checkConnection();
   }, []);
 
   return (
     <div>
-      {!plugIsConnected ? (
-        <div className="card">
-          <button onClick={handleLogin} disabled={loading}>
-            Login with Plug
-          </button>
-        </div>
-      ) : (
+      {!isConnected ? (
+        <>
+          <div className="card">
+            <button onClick={handleLogin} disabled={loading}>
+              Login with Plug
+            </button>
+          </div>
+        </>
+      ) : connectionType === 'plug' ? (
         <>
           <p>
             Your plug principal is
             <br />
-            {yourPrincipal}
+            {loggedInPrincipal}
           </p>
           <button onClick={handleLogout} disabled={loading}>
             Logout
           </button>
         </>
+      ) : (
+        <></>
       )}
     </div>
   );

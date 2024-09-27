@@ -25,6 +25,7 @@ import BobWithdrawField from './components/BobWithdrawField';
 
 import bigintToFloatString from './bigIntToFloatString';
 import PlugLoginHandler from './components/PlugLoginHandler';
+import InternetIdentityLoginHandler from './components/InternetIdentityLoginHandler';
 
 const bobCanisterID =
   window.location.href.includes('localhost') ||
@@ -49,7 +50,8 @@ function App() {
   const [share, setShare] = useState<bigint>(0n);
   const [stats, setStats] = useState<Stats | null>(null);
 
-  const [plugIsConnected, setPlugIsConnected] = useState<boolean>(false);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [connectionType, setConnectionType] = useState<string>('');
 
   const [reBobActor, setreBobActor] = useState<reBobService | null>(null);
   // const [reBobActorTemp, setreBobActorTemp] = useState<reBobService | null>(
@@ -60,132 +62,10 @@ function App() {
   const [totalBobHeld, setTotalBobHeld] = useState<string>('');
   const [totalReBobMinted, setTotalReBobMinted] = useState<string>('');
 
-  const authClientRef = useRef<AuthClient | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loggedInPrincipal, setLoggedInPrincipal] = useState('');
 
   const bobFee: bigint = 1_000_000n;
   const reBobFee: bigint = 10_000n;
-
-  const login = async (): Promise<void> => {
-    // Create AuthClient instance
-    authClientRef.current = await AuthClient.create();
-
-    // Check if authClientRef was set correctly
-    if (!authClientRef.current) {
-      console.error('AuthClient could not be created.');
-      return;
-    }
-
-    // Use the non-null assertion to ensure TypeScript knows it isn't null
-    return new Promise((resolve, reject) => {
-      authClientRef.current!.login({
-        identityProvider:
-          //'http://localhost:4943/?canisterId=bw4dl-smaaa-aaaaa-qaacq-cai', //'https://identity.ic0.app/#authorize',
-          'http://bw4dl-smaaa-aaaaa-qaacq-cai.localhost:4943',
-        //http://r7inp-6aaaa-aaaaa-aaabq-cai.127.0.0.1:4943?#authorize
-        onSuccess: () => {
-          setIsAuthenticated(true); // Set authentication state to true
-          resolve(); // Resolve the promise on success
-        },
-        onError: (error) => {
-          console.error('Login failed:', error);
-          reject(error); // Reject the promise on error
-        },
-      });
-    });
-  };
-
-  const logout = async () => {
-    // if (!isAuthenticated) {
-    //   console.log("not logged in");
-    // }
-    if (authClientRef.current) {
-      await authClientRef.current.logout();
-      setIsAuthenticated(false);
-      //console.log("logged out");
-      setLoggedInPrincipal('');
-    }
-  };
-
-  const [myAgent, setMyAgent] = useState<reBobService | null>(null);
-
-  const createAgent = async () => {
-    if (!authClientRef.current) {
-      console.log('authClientRef was null in createAgent()');
-      return;
-    }
-    const identity = authClientRef.current.getIdentity();
-
-    const agent = new HttpAgent({
-      host:
-        window.location.href.includes('localhost') ||
-        window.location.href.includes('127.0.0.1')
-          ? 'http://localhost:4943'
-          : 'https://ic0.app/',
-      identity: identity,
-    });
-
-    if (
-      window.location.href.includes('localhost') ||
-      window.location.href.includes('127.0.0.1')
-    ) {
-      agent.fetchRootKey();
-    }
-
-    setMyAgent(
-      await Actor.createActor(reBobFactory, {
-        agent,
-        canisterId: reBobCanisterID,
-      })
-    );
-  };
-
-  const setupInternetIdentity = async () => {
-    await login();
-
-    await createAgent();
-  };
-
-  useEffect(() => {
-    if (!myAgent || !authClientRef.current) {
-      console.log(
-        "couldn't setup the internet identity agent and/or the authClientRef!"
-      );
-      return;
-    }
-
-    //console.log("attempting to print principal");
-    //const principal = await actorRef.current.whoami();
-    // setLoggedInPrincipal(principal.toString());
-    const identity = authClientRef.current.getIdentity();
-
-    console.log(identity.getPrincipal().toString());
-    setLoggedInPrincipal(identity.getPrincipal().toString());
-    //console.log(principal.toString());
-  }, [myAgent, authClientRef.current]);
-
-  const asyncFunction = async () => {
-    if (!myAgent) return;
-
-    //const response = await myAgent.icrc1_metadata();
-
-    console.log(myAgent);
-    console.log(loggedInPrincipal);
-    const response = await myAgent.icrc1_metadata();
-    //const response1 = await actorRef.current.icrc1_metadata();
-
-    console.log(response);
-    //console.log(response1);
-  };
-
-  const handleButtonClickTest = () => {
-    asyncFunction();
-  };
-
-  const handleInternetIdentityLogin = () => {
-    setupInternetIdentity();
-  };
 
   const fetchTotalTokens = async () => {
     // const totalBobHeldResponse = await bobLedgerActor.icrc1_balance_of({
@@ -257,7 +137,7 @@ function App() {
     if (bobLedgerActor === null) return;
 
     const bobLedgerBalanceResponse = await bobLedgerActor.icrc1_balance_of({
-      owner: await window.ic.plug.agent.getPrincipal(),
+      owner: Principal.fromText(loggedInPrincipal),
       subaccount: [],
     });
 
@@ -269,7 +149,7 @@ function App() {
   const getReBobLedgerBalance = async () => {
     if (reBobActor === null) return;
     const reBobLedgerBalanceResponse = await reBobActor.icrc1_balance_of({
-      owner: await window.ic.plug.agent.getPrincipal(),
+      owner: Principal.fromText(loggedInPrincipal),
       subaccount: [],
     });
 
@@ -282,7 +162,7 @@ function App() {
     if (bobLedgerActor === null) return;
     const bobLedgerAllowanceResponse = await bobLedgerActor.icrc2_allowance({
       account: {
-        owner: await window.ic.plug.agent.getPrincipal(),
+        owner: Principal.fromText(loggedInPrincipal),
         subaccount: [],
       },
       spender: { owner: Principal.fromText(reBobCanisterID), subaccount: [] },
@@ -300,7 +180,7 @@ function App() {
     if (reBobActor === null) return;
     const reBobLedgerAllowanceResponse = await reBobActor.icrc2_allowance({
       account: {
-        owner: await window.ic.plug.agent.getPrincipal(),
+        owner: Principal.fromText(loggedInPrincipal),
         subaccount: [],
       },
       spender: { owner: Principal.fromText(reBobCanisterID), subaccount: [] },
@@ -383,7 +263,6 @@ function App() {
           )}{' '}
         </h3>
       </div>
-
       <PlugLoginHandler
         bobCanisterID={bobCanisterID}
         setBobLedgerActor={setBobLedgerActor}
@@ -391,29 +270,32 @@ function App() {
         setreBobActor={setreBobActor}
         loading={loading}
         setLoading={setLoading}
-        plugIsConnected={plugIsConnected}
-        setPlugIsConnected={setPlugIsConnected}
+        isConnected={isConnected}
+        setIsConnected={setIsConnected}
+        connectionType={connectionType}
+        setConnectionType={setConnectionType}
+        setBobLedgerBalance={setBobLedgerBalance}
+        setreBobLedgerBalance={setreBobLedgerBalance}
+        loggedInPrincipal={loggedInPrincipal}
+        setLoggedInPrincipal={setLoggedInPrincipal}
       />
 
-      {!plugIsConnected || false ? (
-        <>
-          <div>
-            <button
-              onClick={() => {
-                handleInternetIdentityLogin();
-              }}
-            >
-              Login with II
-            </button>
-            <button
-              onClick={() => {
-                handleButtonClickTest();
-              }}
-            >
-              test II logged in
-            </button>
-          </div>
-        </>
+      <InternetIdentityLoginHandler
+        bobCanisterID={bobCanisterID}
+        setBobLedgerActor={setBobLedgerActor}
+        reBobCanisterID={reBobCanisterID}
+        setreBobActor={setreBobActor}
+        loading={loading}
+        setLoading={setLoading}
+        isConnected={isConnected}
+        setIsConnected={setIsConnected}
+        connectionType={connectionType}
+        setConnectionType={setConnectionType}
+        loggedInPrincipal={loggedInPrincipal}
+        setLoggedInPrincipal={setLoggedInPrincipal}
+      />
+      {!isConnected || false ? (
+        <></>
       ) : (
         <>
           <div
@@ -441,7 +323,7 @@ function App() {
                 setLoading={setLoading}
                 bobLedgerBalance={bobLedgerBalance}
                 bobFee={bobFee}
-                isConnected={plugIsConnected}
+                isConnected={isConnected}
                 reBobCanisterID={reBobCanisterID}
                 bobLedgerActor={bobLedgerActor}
                 cleanUp={cleanUp}
@@ -469,7 +351,7 @@ function App() {
                 reBobLedgerBalance={reBobLedgerBalance}
                 reBobFee={reBobFee}
                 bobFee={bobFee}
-                isConnected={plugIsConnected}
+                isConnected={isConnected}
                 reBobActor={reBobActor}
                 reBobCanisterID={reBobCanisterID}
                 cleanUp={cleanUp}
