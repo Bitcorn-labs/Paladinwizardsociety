@@ -166,6 +166,12 @@ class TokenObject {
     if (this.actor === null) return null;
 
     try {
+      console.log(
+        'attempting to fecth a balance from ',
+        this.canisterId,
+        ' of ',
+        this.loggedInPrincipal
+      );
       const response = await this.actor.icrc1_balance_of({
         owner: Principal.fromText(this.loggedInPrincipal),
         subaccount: [],

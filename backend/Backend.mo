@@ -40,9 +40,9 @@ shared ({ caller = _owner }) actor class Token(
   let Map = ICRC1.Map;
 
   //let ICPLedger : ICPTypes.Service = actor ("ryjl3-tyaaa-aaaaa-aaaba-cai");
-  //let DKPLedger : ICPTypes.Service = actor ("zfcdd-tqaaa-aaaaq-aaaga-cai"); //ic0
+  let DKPLedger : ICPTypes.Service = actor ("zfcdd-tqaaa-aaaaq-aaaga-cai"); //ic0
   // let backendCanisterID : String = "hjfd4-eqaaa-aaaam-adkmq-cai"; // ic0
-  let DKPLedger : ICPTypes.Service = actor ("bd3sg-teaaa-aaaaa-qaaba-cai"); // local
+  // let DKPLedger : ICPTypes.Service = actor ("bd3sg-teaaa-aaaaa-qaaba-cai"); // local
 
   type Account = ICRC1.Account;
 

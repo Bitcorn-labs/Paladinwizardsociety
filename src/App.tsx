@@ -207,6 +207,14 @@ function App() {
         gameCompleted={gameCompleted}
         loginSection={loginSection}
       />
+      <button
+        onClick={() => {
+          inputTokenObject.printDetails();
+          outputTokenObject.printDetails();
+        }}
+      >
+        Test
+      </button>
       <Routes>
         <Route
           path="/"
@@ -243,7 +251,7 @@ function App() {
           }
         />
         <Route path="/lair" element={<Lair />} />
-        <Route path="*" element={<NotFound />} />
+        {/* <Route path="*" element={<NotFound />} /> */}
       </Routes>
       <Footer
         loading={loading}
